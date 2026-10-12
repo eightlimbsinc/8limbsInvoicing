@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Ubuntu:wght@400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -24,7 +24,7 @@ body {
     @apply opacity-45 cursor-not-allowed;
   }
   .btn-primary {
-    @apply bg-slate-900 border-slate-900 text-white hover:bg-slate-700;
+    @apply bg-blue-600 border-blue-600 text-white hover:bg-blue-700;
   }
   .btn-secondary {
     @apply bg-white border-slate-300 text-slate-800 hover:bg-slate-50;
@@ -50,7 +50,7 @@ body {
     @apply h-auto py-2;
   }
   .input:focus {
-    @apply border-slate-900 ring-1 ring-slate-900;
+    @apply border-blue-600 ring-1 ring-blue-600;
   }
 }
 
@@ -63,6 +63,9 @@ body {
   }
   .no-print {
     display: none !important;
+  }
+  .invoice-doc {
+    padding: 0 !important;
   }
   .print-plain {
     border: 0 !important;

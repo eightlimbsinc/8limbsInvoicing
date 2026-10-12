@@ -1,160 +1,233 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { addDays, todayISO } from './calc'
-import type { Client, Invoice, InvoiceStatus, Settings } from './types'
+import { addDays, invoiceTotals, nextIssueDate, todayISO } from './calc'
+import { clientFromRow, invoiceFromRow, recurringFromRow, settingsFromRow, toRow } from './db'
+import { supabase } from './supabase'
+import type { BillingContent, Client, Invoice, InvoiceStatus, LineItem, Recurring, RecurringStatus, Settings } from './types'
 
 export const uid = () => crypto.randomUUID()
 
-const initialSettings: Settings = {
+export const DEFAULT_SETTINGS: Settings = {
   businessName: '',
   email: '',
   phone: '',
   address: '',
+  website: '',
   logo: '',
   currency: 'USD',
   defaultTaxRate: 0,
   paymentTermsDays: 30,
   invoicePrefix: 'INV-',
-  nextNumber: 1001,
-  paymentInstructions: '',
-  defaultNotes: 'Thank you for your business!',
+  numberPadding: 6,
+  nextNumber: 1,
+  paymentLink: '',
+  defaultNotes: '',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Toronto',
 }
 
-export type InvoiceDraft = Omit<Invoice, 'id' | 'number' | 'createdAt' | 'sentAt' | 'paidAt'>
+/** An invoice being edited: new ones have no id/number until the database assigns them. */
+export type InvoiceDraft = BillingContent & Pick<Invoice, 'issueDate' | 'dueDate' | 'status'> & Partial<Pick<Invoice, 'id' | 'number'>>
+export type RecurringDraft = Omit<Recurring, 'id' | 'generatedCount' | 'lastIssuedOn' | 'total'> & Partial<Pick<Recurring, 'id'>>
 
-interface InvoicingState {
+interface State {
+  loaded: boolean
   settings: Settings
   clients: Client[]
   invoices: Invoice[]
+  recurring: Recurring[]
 
-  updateSettings: (patch: Partial<Settings>) => void
-  saveClient: (client: Client) => void
-  /** Returns false (and deletes nothing) if the client still has invoices. */
-  deleteClient: (id: string) => boolean
-  createInvoice: (draft: InvoiceDraft) => string
-  updateInvoice: (invoice: Invoice) => void
-  deleteInvoice: (id: string) => void
-  setStatus: (id: string, status: InvoiceStatus) => void
-  duplicateInvoice: (id: string) => string | null
-  blankDraft: () => InvoiceDraft
-  exportData: () => BackupData
-  /** Replaces all data. Throws if the file isn't a backup from this app. */
-  importData: (data: unknown) => void
+  load: () => Promise<void>
+  reset: () => void
+  saveSettings: (patch: Partial<Settings>) => Promise<void>
+  saveClient: (client: Client) => Promise<Client>
+  deleteClient: (id: string) => Promise<void>
+  saveInvoice: (draft: InvoiceDraft) => Promise<Invoice>
+  setInvoiceStatus: (id: string, status: InvoiceStatus) => Promise<void>
+  deleteInvoice: (id: string) => Promise<void>
+  saveRecurring: (draft: RecurringDraft, scheduleChanged: boolean) => Promise<Recurring>
+  setRecurringStatus: (id: string, status: RecurringStatus) => Promise<void>
+  deleteRecurring: (id: string) => Promise<void>
+  blankLine: () => LineItem
+  blankInvoice: () => InvoiceDraft
+  blankRecurring: () => RecurringDraft
 }
 
-export interface BackupData {
-  app: 'invoicing'
-  version: 1
-  settings: Settings
-  clients: Client[]
-  invoices: Invoice[]
+/** Throws the Supabase error with a readable message. */
+function check<T>({ data, error }: { data: T; error: { message: string; code?: string } | null }): T {
+  if (error) {
+    if (error.code === '23503') throw new Error('This record is still used by invoices or recurring schedules.')
+    if (error.code === '23505') throw new Error('That invoice number is already used.')
+    throw new Error(error.message)
+  }
+  return data
 }
 
-export const useInvoicing = create<InvoicingState>()(
-  persist(
-    (set, get) => ({
-      settings: initialSettings,
-      clients: [],
-      invoices: [],
+const replace = <T extends { id: string }>(list: T[], item: T) =>
+  list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item]
 
-      updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+const content = (d: BillingContent) => ({
+  clientId: d.clientId,
+  items: d.items,
+  discountRate: d.discountRate,
+  notes: d.notes,
+  paymentLink: d.paymentLink,
+  currency: d.currency,
+  total: invoiceTotals(d).total,
+})
 
-      saveClient: (client) =>
-        set((s) => ({
-          clients: s.clients.some((c) => c.id === client.id)
-            ? s.clients.map((c) => (c.id === client.id ? client : c))
-            : [...s.clients, client],
-        })),
+export const useInvoicing = create<State>()((set, get) => ({
+  loaded: false,
+  settings: DEFAULT_SETTINGS,
+  clients: [],
+  invoices: [],
+  recurring: [],
 
-      deleteClient: (id) => {
-        if (get().invoices.some((i) => i.clientId === id)) return false
-        set((s) => ({ clients: s.clients.filter((c) => c.id !== id) }))
-        return true
-      },
+  load: async () => {
+    // Catch up on any recurring invoices that came due (the hourly job does this too).
+    await supabase.rpc('generate_due_recurring_invoices')
+    const [s, c, i, r] = await Promise.all([
+      supabase.from('settings').select('*').maybeSingle(),
+      supabase.from('clients').select('*').order('name'),
+      supabase.from('invoices').select('*').order('issue_date', { ascending: false }),
+      supabase.from('recurring_invoices').select('*').order('created_at'),
+    ])
+    let settingsRow = check(s)
+    if (!settingsRow) settingsRow = check(await supabase.from('settings').insert(toRow({ timezone: DEFAULT_SETTINGS.timezone })).select().single())
+    set({
+      loaded: true,
+      settings: settingsFromRow(settingsRow),
+      clients: (check(c) ?? []).map(clientFromRow),
+      invoices: (check(i) ?? []).map(invoiceFromRow),
+      recurring: (check(r) ?? []).map(recurringFromRow),
+    })
+  },
 
-      createInvoice: (draft) => {
-        const { settings } = get()
-        const invoice: Invoice = {
-          ...draft,
-          id: uid(),
-          number: `${settings.invoicePrefix}${settings.nextNumber}`,
-          createdAt: Date.now(),
-        }
-        set((s) => ({
-          invoices: [...s.invoices, invoice],
-          settings: { ...s.settings, nextNumber: s.settings.nextNumber + 1 },
-        }))
-        return invoice.id
-      },
+  reset: () => set({ loaded: false, settings: DEFAULT_SETTINGS, clients: [], invoices: [], recurring: [] }),
 
-      updateInvoice: (invoice) => set((s) => ({ invoices: s.invoices.map((i) => (i.id === invoice.id ? invoice : i)) })),
+  saveSettings: async (patch) => {
+    const row = check(await supabase.from('settings').update(toRow(patch)).not('user_id', 'is', null).select().single())
+    set({ settings: settingsFromRow(row) })
+  },
 
-      deleteInvoice: (id) => set((s) => ({ invoices: s.invoices.filter((i) => i.id !== id) })),
+  saveClient: async (client) => {
+    const saved = clientFromRow(check(await supabase.from('clients').upsert(toRow(client)).select().single())!)
+    set((s) => ({ clients: replace(s.clients, saved).sort((a, b) => a.name.localeCompare(b.name)) }))
+    return saved
+  },
 
-      setStatus: (id, status) =>
-        set((s) => ({
-          invoices: s.invoices.map((i) => {
-            if (i.id !== id) return i
-            const now = Date.now()
-            return {
-              ...i,
-              status,
-              sentAt: status === 'draft' ? undefined : (i.sentAt ?? now),
-              paidAt: status === 'paid' ? (i.paidAt ?? now) : undefined,
-            }
-          }),
-        })),
+  deleteClient: async (id) => {
+    check(await supabase.from('clients').delete().eq('id', id))
+    set((s) => ({ clients: s.clients.filter((c) => c.id !== id) }))
+  },
 
-      duplicateInvoice: (id) => {
-        const src = get().invoices.find((i) => i.id === id)
-        if (!src) return null
-        const base = get().blankDraft()
-        return get().createInvoice({
-          ...base,
-          clientId: src.clientId,
-          items: src.items.map((it) => ({ ...it, id: uid() })),
-          taxRate: src.taxRate,
-          discountRate: src.discountRate,
-          notes: src.notes,
-        })
-      },
+  saveInvoice: async (draft) => {
+    const row = toRow({ ...content(draft), issueDate: draft.issueDate, dueDate: draft.dueDate, status: draft.status })
+    const res = draft.id
+      ? await supabase.from('invoices').update({ ...row, number: draft.number }).eq('id', draft.id).select().single()
+      : await supabase.from('invoices').insert(row).select().single()
+    const saved = invoiceFromRow(check(res))
+    set((s) => ({ invoices: replace(s.invoices, saved) }))
+    if (!draft.id) {
+      // The database advanced next_number; pick it up for the Settings screen.
+      const { data } = await supabase.from('settings').select('*').maybeSingle()
+      if (data) set({ settings: settingsFromRow(data) })
+    }
+    return saved
+  },
 
-      blankDraft: () => {
-        const { settings } = get()
-        const issueDate = todayISO()
-        return {
-          clientId: '',
-          issueDate,
-          dueDate: addDays(issueDate, settings.paymentTermsDays),
-          status: 'draft',
-          items: [{ id: uid(), description: '', quantity: 1, unitPrice: 0 }],
-          taxRate: settings.defaultTaxRate,
-          discountRate: 0,
-          notes: settings.defaultNotes,
-        }
-      },
+  setInvoiceStatus: async (id, status) => {
+    const inv = get().invoices.find((i) => i.id === id)
+    if (!inv) return
+    const now = new Date().toISOString()
+    const patch = {
+      status,
+      sentAt: status === 'draft' ? null : (inv.sentAt ?? now),
+      paidAt: status === 'paid' ? (inv.paidAt ?? now) : null,
+    }
+    const saved = invoiceFromRow(check(await supabase.from('invoices').update(toRow(patch)).eq('id', id).select().single())!)
+    set((s) => ({ invoices: replace(s.invoices, saved) }))
+  },
 
-      exportData: () => {
-        const { settings, clients, invoices } = get()
-        return { app: 'invoicing', version: 1, settings, clients, invoices }
-      },
+  deleteInvoice: async (id) => {
+    check(await supabase.from('invoices').delete().eq('id', id))
+    set((s) => ({ invoices: s.invoices.filter((i) => i.id !== id) }))
+  },
 
-      importData: (data) => {
-        const d = data as Partial<BackupData> | null
-        if (!d || d.app !== 'invoicing' || !Array.isArray(d.clients) || !Array.isArray(d.invoices) || typeof d.settings !== 'object') {
-          throw new Error('Not an invoicing backup file')
-        }
-        set({ settings: { ...initialSettings, ...d.settings }, clients: d.clients, invoices: d.invoices })
-      },
-    }),
-    {
-      name: 'invoicing-app',
-      version: 1,
-      partialize: (s) => ({ settings: s.settings, clients: s.clients, invoices: s.invoices }),
-      merge: (persisted, current) => {
-        const p = persisted as Partial<InvoicingState> | undefined
-        return { ...current, ...p, settings: { ...initialSettings, ...p?.settings } }
-      },
-    },
-  ),
-)
+  saveRecurring: async (draft, scheduleChanged) => {
+    const row = toRow({
+      ...content(draft),
+      id: draft.id ?? uid(),
+      name: draft.name.trim(),
+      status: draft.status,
+      intervalUnit: draft.intervalUnit,
+      intervalCount: draft.intervalCount,
+      paymentTermsDays: draft.paymentTermsDays,
+      endDate: draft.endDate || null,
+      maxOccurrences: draft.maxOccurrences || null,
+      autoSend: draft.autoSend,
+      // A new date or frequency re-anchors the schedule on the chosen next issue date.
+      ...(scheduleChanged || !draft.id ? { startDate: draft.startDate, periodIndex: 0 } : {}),
+    })
+    check(await supabase.from('recurring_invoices').upsert(row))
+    // Issues anything due today (or missed periods for a backdated start).
+    await get().load()
+    return get().recurring.find((r) => r.id === row.id)!
+  },
+
+  setRecurringStatus: async (id, status) => {
+    const r = get().recurring.find((x) => x.id === id)
+    if (!r) return
+    let periodIndex = r.periodIndex
+    if (status === 'active' && r.status === 'paused') {
+      // Resuming skips the periods missed while paused instead of back-billing them.
+      const today = todayISO()
+      while (nextIssueDate({ ...r, periodIndex }) < today) periodIndex++
+    }
+    check(await supabase.from('recurring_invoices').update(toRow({ status, periodIndex })).eq('id', id))
+    await get().load()
+  },
+
+  deleteRecurring: async (id) => {
+    check(await supabase.from('recurring_invoices').delete().eq('id', id))
+    set((s) => ({ recurring: s.recurring.filter((r) => r.id !== id) }))
+  },
+
+  blankLine: () => ({ id: uid(), description: '', quantity: 1, unitPrice: 0, taxRate: get().settings.defaultTaxRate }),
+
+  blankInvoice: () => {
+    const { settings } = get()
+    const issueDate = todayISO()
+    return {
+      clientId: '',
+      issueDate,
+      dueDate: addDays(issueDate, settings.paymentTermsDays),
+      status: 'draft',
+      items: [get().blankLine()],
+      discountRate: 0,
+      notes: settings.defaultNotes,
+      paymentLink: settings.paymentLink,
+      currency: settings.currency,
+    }
+  },
+
+  blankRecurring: () => {
+    const { settings } = get()
+    return {
+      name: '',
+      clientId: '',
+      status: 'active',
+      startDate: todayISO(),
+      periodIndex: 0,
+      intervalUnit: 'month',
+      intervalCount: 1,
+      paymentTermsDays: settings.paymentTermsDays,
+      endDate: null,
+      maxOccurrences: null,
+      autoSend: true,
+      items: [get().blankLine()],
+      discountRate: 0,
+      notes: settings.defaultNotes,
+      paymentLink: settings.paymentLink,
+      currency: settings.currency,
+    }
+  },
+}))
