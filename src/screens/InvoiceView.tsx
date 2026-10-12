@@ -135,6 +135,38 @@ export function InvoiceView({ id }: { id: string }) {
         <div className="rounded border border-slate-200 shadow-sm print-plain overflow-hidden">
           <InvoiceDocument invoice={invoice} client={client} business={settings} />
         </div>
+
+        <div className="no-print mt-4 panel shadow-sm p-4 flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" onClick={() => window.print()}>
+              View PDF
+            </Button>
+            {shared ? (
+              <a className="btn btn-secondary no-underline" href={shareUrl(invoice.shareToken)} target="_blank" rel="noopener noreferrer">
+                Online version ↗
+              </a>
+            ) : (
+              <Button disabled title="Mark the invoice as sent to enable the online version">
+                Online version ↗
+              </Button>
+            )}
+          </div>
+          {shared ? (
+            <div>
+              <label htmlFor="client-link" className="field-label">
+                Client link — anyone with this link can view and pay this invoice
+              </label>
+              <div className="flex gap-2">
+                <input id="client-link" className="input font-mono text-xs" readOnly value={shareUrl(invoice.shareToken)} onFocus={(e) => e.target.select()} />
+                <Button onClick={copyLink}>{copied ? 'Copied ✓' : 'Copy'}</Button>
+              </div>
+            </div>
+          ) : (
+            <p className="m-0 text-sm text-slate-500">
+              {invoice.status === 'void' ? 'Voided invoices have no client link.' : 'The online version and client link become available once you mark this invoice as sent.'}
+            </p>
+          )}
+        </div>
       </div>
     </>
   )
