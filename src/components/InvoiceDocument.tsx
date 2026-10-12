@@ -157,9 +157,18 @@ export function RichNotes({ text, vars }: { text: string; vars: Record<string, s
         .filter((line) => line.trim())
         .map((line, i) => (
           <p key={i} className="m-0">
-            {line.split(/(\*\*[^*]+\*\*)/g).map((part, j) =>
-              part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={j}>{part.slice(2, -2)}</strong> : part,
-            )}
+            {line.split(/(\*\*[^*]+\*\*)/g).map((part, j, parts) => {
+              if (!(part.startsWith('**') && part.endsWith('**') && part.length > 4)) return part
+              const label = part.slice(2, -2)
+              // "**Bank Name:**CIBC" reads as "Bank Name: CIBC"
+              const gap = label.endsWith(':') && /^\S/.test(parts[j + 1] ?? '') ? ' ' : ''
+              return (
+                <strong key={j}>
+                  {label}
+                  {gap}
+                </strong>
+              )
+            })}
           </p>
         ))}
     </div>

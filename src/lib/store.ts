@@ -37,7 +37,10 @@ interface State {
 
   load: () => Promise<void>
   reset: () => void
-  saveSettings: (patch: Partial<Settings>) => Promise<void>
+  /** Saves settings; returns how many invoices/schedules had missing terms or payment link filled in. */
+  saveSettings: (patch: Partial<Settings>) => Promise<number>
+  /** Copies the default terms/payment link from Settings onto one invoice where it has none. */
+  applyDefaultsToInvoice: (id: string) => Promise<void>
   saveClient: (client: Client) => Promise<Client>
   deleteClient: (id: string) => Promise<void>
   saveInvoice: (draft: InvoiceDraft) => Promise<Invoice>
@@ -105,7 +108,30 @@ export const useInvoicing = create<State>()((set, get) => ({
 
   saveSettings: async (patch) => {
     const row = check(await supabase.from('settings').update(toRow(patch)).not('user_id', 'is', null).select().single())
-    set({ settings: settingsFromRow(row) })
+    const settings = settingsFromRow(row!)
+    set({ settings })
+
+    // Invoices are created with a copy of the defaults, so ones made before the
+    // defaults were filled in have none. Give those the new defaults.
+    let filled = 0
+    for (const [field, value] of [['notes', settings.defaultNotes], ['payment_link', settings.paymentLink]] as const) {
+      if (!value.trim()) continue
+      for (const table of ['invoices', 'recurring_invoices'] as const) {
+        const rows = check(await supabase.from(table).update({ [field]: value }).eq(field, '').select('id'))
+        filled += rows?.length ?? 0
+      }
+    }
+    if (filled) await get().load()
+    return filled
+  },
+
+  applyDefaultsToInvoice: async (id) => {
+    const inv = get().invoices.find((i) => i.id === id)
+    if (!inv) return
+    const { defaultNotes, paymentLink } = get().settings
+    const patch = { notes: inv.notes.trim() ? inv.notes : defaultNotes, paymentLink: inv.paymentLink || paymentLink }
+    const saved = invoiceFromRow(check(await supabase.from('invoices').update(toRow(patch)).eq('id', id).select().single())!)
+    set((s) => ({ invoices: replace(s.invoices, saved) }))
   },
 
   saveClient: async (client) => {
