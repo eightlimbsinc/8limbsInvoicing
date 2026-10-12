@@ -42,7 +42,8 @@ export function Dashboard() {
 
   const q = query.trim().toLowerCase()
   const visible = rows.filter(
-    (r) => (filter === 'all' || r.status === filter) && (!q || r.inv.number.toLowerCase().includes(q) || r.client.toLowerCase().includes(q)),
+    // Voided invoices only appear under the Void filter.
+    (r) => (filter === 'all' ? r.status !== 'void' : r.status === filter) && (!q || r.inv.number.toLowerCase().includes(q) || r.client.toLowerCase().includes(q)),
   )
 
   return (
