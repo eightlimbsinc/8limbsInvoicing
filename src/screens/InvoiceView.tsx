@@ -15,6 +15,7 @@ export function InvoiceView({ id }: { id: string }) {
   const setInvoiceStatus = useInvoicing((s) => s.setInvoiceStatus)
   const deleteInvoice = useInvoicing((s) => s.deleteInvoice)
   const saveInvoice = useInvoicing((s) => s.saveInvoice)
+  const applyDefaultsToInvoice = useInvoicing((s) => s.applyDefaultsToInvoice)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
@@ -79,7 +80,18 @@ export function InvoiceView({ id }: { id: string }) {
         subtitle={recurring ? `Issued by recurring invoice “${recurring.name}”` : undefined}
         actions={
           <>
-            {invoice.status === 'draft' && (
+            {!invoice.notes.trim() && (
+        <div className="no-print mb-4 flex flex-wrap items-center gap-3 rounded-md bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm text-amber-900">
+          <span className="flex-1">
+            This invoice has no terms &amp; notes.
+            {!settings.defaultNotes.trim() && ' Add default terms in Settings first.'}
+          </span>
+          {settings.defaultNotes.trim() && (
+            <Button onClick={run(() => applyDefaultsToInvoice(invoice.id))}>Add terms from Settings</Button>
+          )}
+        </div>
+      )}
+      {invoice.status === 'draft' && (
               <Button variant="primary" onClick={setStatus('sent')}>
                 Mark as sent
               </Button>

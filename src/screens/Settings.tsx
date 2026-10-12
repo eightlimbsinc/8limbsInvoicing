@@ -79,13 +79,13 @@ export function Settings() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     run(async () => {
-      await saveSettings({
+      const filled = await saveSettings({
         ...form,
         currency: form.currency.trim().toUpperCase() || 'USD',
         nextNumber: Math.max(1, Math.floor(form.nextNumber)),
         numberPadding: Math.min(12, Math.floor(form.numberPadding)),
       })
-      return 'Saved'
+      return filled ? `Saved — default terms / payment link added to ${filled} invoice${filled === 1 ? '' : 's'} or schedule${filled === 1 ? '' : 's'} that had none` : 'Saved'
     })
   }
 
