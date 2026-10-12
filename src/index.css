@@ -1,0 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: theme('colors.slate.100');
+  color: theme('colors.slate.900');
+  font-family: theme('fontFamily.body');
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-md border text-sm font-medium cursor-pointer transition-colors whitespace-nowrap;
+  }
+  .btn:disabled {
+    @apply opacity-45 cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-slate-900 border-slate-900 text-white hover:bg-slate-700;
+  }
+  .btn-secondary {
+    @apply bg-white border-slate-300 text-slate-800 hover:bg-slate-50;
+  }
+  .btn-danger {
+    @apply bg-white border-red-300 text-red-700 hover:bg-red-50;
+  }
+  .btn-ghost {
+    @apply bg-transparent border-transparent text-slate-600 hover:bg-slate-200/60;
+  }
+
+  .panel {
+    @apply bg-white rounded-lg border border-slate-200;
+  }
+
+  .field-label {
+    @apply block text-xs font-medium mb-1 text-slate-600;
+  }
+  .input {
+    @apply w-full h-9 px-2.5 text-sm bg-white text-slate-900 border border-slate-300 rounded-md outline-none;
+  }
+  textarea.input {
+    @apply h-auto py-2;
+  }
+  .input:focus {
+    @apply border-slate-900 ring-1 ring-slate-900;
+  }
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  body {
+    background: white;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-plain {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+}
