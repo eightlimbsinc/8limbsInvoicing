@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { Button, EmptyState, PageHeader, StatusBadge } from '../components/ui'
-import { displayStatus, invoiceTotals, round2, toISO, todayISO } from '../lib/calc'
+import { Avatar, Button, EmptyState, PageHeader, StatusBadge } from '../components/ui'
+import { displayStatus, round2, todayISO } from '../lib/calc'
 import { fmtDate, fmtMoney } from '../lib/format'
 import { navigate } from '../lib/router'
 import { useInvoicing } from '../lib/store'
 import type { DisplayStatus } from '../lib/types'
 
 type Filter = 'all' | DisplayStatus
-const FILTERS: Filter[] = ['all', 'draft', 'sent', 'overdue', 'paid']
+const FILTERS: Filter[] = ['all', 'draft', 'sent', 'overdue', 'paid', 'void']
 
 export function Dashboard() {
   const invoices = useInvoicing((s) => s.invoices)
@@ -21,26 +21,24 @@ export function Dashboard() {
     const today = todayISO()
     const clientName = new Map(clients.map((c) => [c.id, c.name]))
     return invoices
-      .map((inv) => ({
-        inv,
-        status: displayStatus(inv, today),
-        total: invoiceTotals(inv).total,
-        client: clientName.get(inv.clientId) ?? '—',
-      }))
-      .sort((a, b) => b.inv.issueDate.localeCompare(a.inv.issueDate) || b.inv.createdAt - a.inv.createdAt)
+      .map((inv) => ({ inv, status: displayStatus(inv, today), client: clientName.get(inv.clientId) ?? '—' }))
+      .sort((a, b) => b.inv.issueDate.localeCompare(a.inv.issueDate) || b.inv.number.localeCompare(a.inv.number))
   }, [invoices, clients])
 
   const stats = useMemo(() => {
-    const sum = (pred: (s: DisplayStatus) => boolean) => round2(rows.filter((r) => pred(r.status)).reduce((t, r) => t + r.total, 0))
+    // Headline totals are in the default currency; invoices in other currencies are left out.
+    const mine = rows.filter((r) => r.inv.currency === currency)
+    const sum = (list: typeof rows) => round2(list.reduce((t, r) => t + r.inv.total, 0))
     const yearStart = `${todayISO().slice(0, 4)}-01-01`
+    const overdue = mine.filter((r) => r.status === 'overdue')
     return {
-      outstanding: sum((s) => s === 'sent' || s === 'overdue'),
-      overdue: sum((s) => s === 'overdue'),
-      overdueCount: rows.filter((r) => r.status === 'overdue').length,
-      paidYtd: round2(rows.filter((r) => r.status === 'paid' && r.inv.paidAt && toISO(new Date(r.inv.paidAt)) >= yearStart).reduce((t, r) => t + r.total, 0)),
+      outstanding: sum(mine.filter((r) => r.status === 'sent' || r.status === 'overdue')),
+      overdue: sum(overdue),
+      overdueCount: overdue.length,
+      paidYtd: sum(mine.filter((r) => r.status === 'paid' && (r.inv.paidAt ?? '').slice(0, 10) >= yearStart)),
       drafts: rows.filter((r) => r.status === 'draft').length,
     }
-  }, [rows])
+  }, [rows, currency])
 
   const q = query.trim().toLowerCase()
   const visible = rows.filter(
@@ -51,8 +49,9 @@ export function Dashboard() {
     <>
       <PageHeader
         title="Invoices"
+        subtitle="Every invoice you've issued, one-off and recurring"
         actions={
-          <Button variant="primary" onClick={() => navigate('/invoices/new')}>
+          <Button variant="primary" className="px-6" onClick={() => navigate('/invoices/new')}>
             + New invoice
           </Button>
         }
@@ -67,16 +66,10 @@ export function Dashboard() {
 
       {invoices.length === 0 ? (
         <EmptyState title="No invoices yet">
-          {clients.length === 0 ? (
-            <>
-              Start by <a href="#/settings">adding your business details</a> and <a href="#/clients">a client</a>, then create your first invoice.
-            </>
-          ) : (
-            'Create your first invoice to get started.'
-          )}
+          Start with <a href="#/settings">your business details</a>, then create an invoice or set up a <a href="#/recurring">recurring invoice</a>.
         </EmptyState>
       ) : (
-        <div className="panel">
+        <div className="panel shadow-sm">
           <div className="flex flex-wrap items-center gap-2 p-3 border-b border-slate-200">
             <div className="flex flex-wrap gap-1">
               {FILTERS.map((f) => (
@@ -86,32 +79,38 @@ export function Dashboard() {
                   onClick={() => setFilter(f)}
                   className={clsx(
                     'px-2.5 py-1 rounded-md text-sm capitalize cursor-pointer border-0',
-                    filter === f ? 'bg-slate-900 text-white' : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                    filter === f ? 'bg-blue-600 text-white' : 'bg-transparent text-slate-600 hover:bg-slate-100',
                   )}
                 >
                   {f}
                 </button>
               ))}
             </div>
-            <input className="input sm:ml-auto sm:max-w-56" placeholder="Search number or client" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input className="input sm:ml-auto sm:max-w-60" type="search" placeholder="Search number or customer" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
 
           {visible.length === 0 ? (
             <p className="p-6 text-center text-sm text-slate-500 m-0">No invoices match.</p>
           ) : (
             <ul className="list-none m-0 p-0 divide-y divide-slate-100">
-              {visible.map(({ inv, status, total, client }) => (
+              {visible.map(({ inv, status, client }) => (
                 <li key={inv.id}>
                   <a href={`#/invoices/${inv.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 no-underline text-inherit">
+                    <Avatar name={client} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{inv.number}</span>
                         <StatusBadge status={status} />
+                        {inv.recurringId && (
+                          <span className="text-xs text-slate-400" title="Issued by a recurring invoice">
+                            ↻
+                          </span>
+                        )}
                       </div>
                       <div className="text-sm text-slate-500 truncate">{client}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-medium tabular-nums">{fmtMoney(total, currency)}</div>
+                      <div className="font-medium tabular-nums">{fmtMoney(inv.total, inv.currency)}</div>
                       <div className="text-xs text-slate-500">Due {fmtDate(inv.dueDate)}</div>
                     </div>
                   </a>
@@ -127,7 +126,7 @@ export function Dashboard() {
 
 function Stat({ label, value, sub, danger }: { label: string; value: string; sub?: string; danger?: boolean }) {
   return (
-    <div className="panel p-4">
+    <div className="panel p-4 shadow-sm">
       <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</div>
       <div className={clsx('mt-1 text-lg font-semibold tabular-nums', danger && 'text-red-700')}>{value}</div>
       {sub && <div className="text-xs text-slate-500">{sub}</div>}

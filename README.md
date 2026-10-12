@@ -1,50 +1,92 @@
 # 8 Limbs Inc — Invoicing
 
-A lightweight invoicing app: manage clients, create invoices, track what's
-been paid, and print or save invoices as PDF. Runs entirely in the browser —
-no backend, no account.
+Invoicing for 8 Limbs Inc.: customers, one-off and recurring invoices,
+payment tracking, and a client-facing invoice page with a **Pay Invoice Here**
+button and PDF download. Data lives in a Supabase (Postgres) database.
 
 ## Features
 
-- **Clients** — name, email, phone, address. Clients with invoices can't be
-  deleted (delete their invoices first).
-- **Invoices** — line items, discount %, tax %, issue/due dates, notes.
-  Numbers are assigned automatically from a configurable prefix + counter
-  (`INV-1001`, `INV-1002`, …). Duplicate an invoice to bill again.
-- **Status tracking** — Draft → Sent → Paid. Sent invoices past their due date
-  show as **Overdue**. The dashboard totals outstanding, overdue and
-  paid-this-year amounts, with status filters and search.
-- **Print / PDF** — the invoice page has a print-ready layout; use
-  **Print / PDF** and choose "Save as PDF". **Email** opens a pre-filled
-  message to the client (attach the PDF).
-- **Business settings** — name, logo, address, contact info, currency,
-  default tax rate, payment terms, numbering and payment instructions.
-- **Backup** — download all data as JSON and restore it on another device.
+- **Invoices** — line items with per-line tax, discount, issue/due dates,
+  payment terms (Due on receipt, Net 7/15/30/45/60/90 or custom), payment link
+  and rich terms & notes. Numbers are assigned by the database
+  (`INV-000156`, `INV-000157`, …) so they never collide.
+- **Status tracking** — Draft → Sent → Paid, plus **Void** (keeps the record but
+  removes it from what's owed). Sent invoices past due show as **Overdue**.
+  Dashboard totals for outstanding, overdue and paid-this-year.
+- **Recurring invoices** — issue an invoice every week / 2 weeks / month /
+  quarter / 6 months / year (or custom) starting on a chosen date, each with its
+  own payment terms (e.g. Net 30 → due 30 days after each issue date). Optional
+  end date or number of invoices. Pause, resume (skips the paused periods),
+  cancel or duplicate. Month-end dates don't drift (Jan 31 → Feb 28 → Mar 31).
+- **Client link** — every sent invoice has a private link
+  (`…/#/i/<token>`) that shows the invoice without signing in, with the pay
+  button and "Click here to download pdf". Drafts are never shown.
+- **Terms & notes template** — one paragraph per line, `**bold**`, and
+  placeholders: `{invoice_number}` `{due_date}` `{issue_date}` `{amount_due}`
+  `{client_name}` `{terms}` (e.g. "Net 30") `{terms_days}`.
+- **Settings** — business name, logo, address, website, currency, default tax,
+  default terms, numbering (prefix, digits, next number), time zone, default
+  payment link and notes. JSON backup download/import.
 
-Totals: discount applies to the subtotal, tax applies to the discounted
-amount, and every step is rounded to cents.
+## How recurring invoices are generated
 
-## Data storage
+The database function `generate_due_recurring_invoices()` issues every invoice
+that has come due (and any missed periods). It runs:
 
-Everything is saved in the browser's `localStorage` (key `invoicing-app`).
-Data does not sync between devices or browsers, and clearing site data erases
-it — use **Settings → Backup** regularly.
+1. **hourly** via `pg_cron` inside Supabase — so invoices are created on the
+   scheduled date even if nobody opens the app; and
+2. whenever the app loads, as a catch-up.
+
+"Today" is evaluated in the time zone set in Settings. Running twice can't
+create duplicates (row locks plus a unique index on schedule + issue date).
+
+## Setup (one time)
+
+1. **Create a Supabase project** at <https://supabase.com> (free tier is fine).
+2. **Create the database**: in the Supabase dashboard open **SQL Editor**, paste
+   and run `supabase/migrations/20261012000001_init.sql`, then
+   `supabase/migrations/20261012000002_schedule.sql`.
+   (Or with the Supabase CLI: `supabase link` then `supabase db push`.)
+3. **Auth**: under **Authentication → URL Configuration**, set the Site URL to
+   your GitHub Pages URL (`https://rvs-spec.github.io/8limbsinc-invoicing/`).
+4. **Connect the app**: copy the Project URL and the `anon` public key from
+   **Project Settings → API**. In GitHub open the repo's **Settings → Secrets and
+   variables → Actions → Variables** and add `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY`. Re-run the deploy workflow (or push).
+5. **Create your account** on the deployed site ("First time? Create an
+   account"), then turn off sign-ups in Supabase: **Authentication → Providers →
+   Email → Allow new users to sign up** off. (Row-level security already keeps
+   each account's data private; this just stops strangers creating accounts.)
+6. In **Settings**, add your logo, address, website, payment link and bank
+   details (start from the Net 30 + bank wire template), and set **Next number**
+   to continue your existing sequence (e.g. 157).
+
+Coming from the earlier browser-only version? Open Settings on the same
+browser and click **Import … invoices saved in this browser**.
 
 ## Development
 
 ```bash
+cp .env.example .env.local   # fill in your Supabase URL + anon key
 npm install
-npm run dev      # local dev server
-npm test         # unit tests for the money/date math
+npm run dev
+npm test        # money + schedule date math (mirrors the SQL)
 npm run lint
 npm run build
 ```
 
-Stack: React 19, TypeScript, Vite, Tailwind CSS, Zustand.
+Stack: React 19, TypeScript, Vite, Tailwind CSS, Zustand, Supabase
+(Postgres, Auth, pg_cron). Pushing to `main` or a `claude/**` branch lints,
+tests, builds and deploys to GitHub Pages.
 
-## Deployment
+## Data model
 
-Pushing to `main` (or any `claude/**` branch) lints, tests, builds and
-deploys to GitHub Pages via `.github/workflows/deploy.yml`. The build uses
-relative paths and hash routing, so it works at
-`https://<owner>.github.io/<repo>/` without extra config.
+| Table | Holds |
+| --- | --- |
+| `settings` | One row per user: business details, defaults, numbering counter |
+| `clients` | Customers |
+| `invoices` | Every invoice (`items` as JSON, stored `total`, `share_token`, `recurring_id`) |
+| `recurring_invoices` | Schedules: frequency, anchor date, terms, end condition, invoice content |
+
+All tables have row-level security limiting each signed-in user to their own
+rows. Customers referenced by invoices or schedules can't be deleted.
