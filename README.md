@@ -57,14 +57,44 @@ create duplicates (row locks plus a unique index on schedule + issue date).
    sign-ups in Supabase (**Authentication → Sign In / Providers → Email → Allow
    new users to sign up** off), then add each user under **Authentication →
    Users → Add user → Create new user** with an email and password (tick
-   **Auto Confirm User**). They sign in on the site with those details. To reset
-   a password, use the user's **⋯** menu in that list.
+   **Auto Confirm User**). After the **Team & users** setup below, admins can do
+   this from the app's **Users** page instead.
 6. In **Settings**, add your logo, address, website, payment link and bank
    details (start from the Net 30 + bank wire template), and set **Next number**
    to continue your existing sequence (e.g. 157).
 
 Coming from the earlier browser-only version? Open Settings on the same
 browser and click **Import … invoices saved in this browser**.
+
+## Team & users
+
+The workspace belongs to the account owner (the first admin). Admins add
+people from the app's **Users** page; everyone works on the same invoices,
+customers and numbering.
+
+| | Admin | Member |
+| --- | --- | --- |
+| Invoices: view, create, edit, mark sent/paid, PDF, client link | ✅ | ✅ |
+| Add a customer while creating an invoice | ✅ | ✅ |
+| Delete / void invoices | ✅ | — |
+| Customers page, Recurring, Settings | ✅ | — |
+| Users: add, change role, reset password, remove | ✅ | — |
+
+The rules are enforced by row-level security in the database, not just
+hidden in the app. The account owner always stays an admin and can't be
+removed, and the last admin can't be demoted.
+
+One-time setup:
+
+1. **Run the migration**: in Supabase **SQL Editor**, run
+   `supabase/migrations/20261013000003_team_roles.sql`. Existing accounts
+   become the admin of their own workspace; data is unchanged.
+2. **Deploy the function**: in Supabase **Edge Functions → Deploy a new
+   function → Via Editor**, name it exactly `admin-users`, replace the code with
+   `supabase/functions/admin-users/index.ts`, and deploy. (CLI alternative:
+   `supabase functions deploy admin-users`.) It uses the project's built-in
+   service-role key, which never reaches the browser.
+3. Keep **Allow new users to sign up** off in Supabase Auth settings.
 
 ## Development
 

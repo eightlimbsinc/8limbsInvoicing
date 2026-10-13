@@ -30,6 +30,8 @@ export type RecurringDraft = Omit<Recurring, 'id' | 'generatedCount' | 'lastIssu
 
 interface State {
   loaded: boolean
+  /** Admins manage settings, recurring schedules, customers and users; members create invoices. */
+  isAdmin: boolean
   settings: Settings
   clients: Client[]
   invoices: Invoice[]
@@ -79,6 +81,7 @@ const content = (d: BillingContent) => ({
 
 export const useInvoicing = create<State>()((set, get) => ({
   loaded: false,
+  isAdmin: false,
   settings: DEFAULT_SETTINGS,
   clients: [],
   invoices: [],
@@ -87,24 +90,28 @@ export const useInvoicing = create<State>()((set, get) => ({
   load: async () => {
     // Catch up on any recurring invoices that came due (the hourly job does this too).
     await supabase.rpc('generate_due_recurring_invoices')
-    const [s, c, i, r] = await Promise.all([
+    const [a, s, c, i, r] = await Promise.all([
+      supabase.rpc('is_admin'),
       supabase.from('settings').select('*').maybeSingle(),
       supabase.from('clients').select('*').order('name'),
       supabase.from('invoices').select('*').order('issue_date', { ascending: false }),
       supabase.from('recurring_invoices').select('*').order('created_at'),
     ])
+    // Databases set up before team roles existed have no is_admin(): everyone there is an admin.
+    const isAdmin = a.error ? true : Boolean(a.data)
     let settingsRow = check(s)
-    if (!settingsRow) settingsRow = check(await supabase.from('settings').insert(toRow({ timezone: DEFAULT_SETTINGS.timezone })).select().single())
+    if (!settingsRow && isAdmin) settingsRow = check(await supabase.from('settings').insert(toRow({ timezone: DEFAULT_SETTINGS.timezone })).select().single())
     set({
       loaded: true,
-      settings: settingsFromRow(settingsRow),
+      isAdmin,
+      settings: settingsRow ? settingsFromRow(settingsRow) : DEFAULT_SETTINGS,
       clients: (check(c) ?? []).map(clientFromRow),
       invoices: (check(i) ?? []).map(invoiceFromRow),
       recurring: (check(r) ?? []).map(recurringFromRow),
     })
   },
 
-  reset: () => set({ loaded: false, settings: DEFAULT_SETTINGS, clients: [], invoices: [], recurring: [] }),
+  reset: () => set({ loaded: false, isAdmin: false, settings: DEFAULT_SETTINGS, clients: [], invoices: [], recurring: [] }),
 
   saveSettings: async (patch) => {
     const row = check(await supabase.from('settings').update(toRow(patch)).not('user_id', 'is', null).select().single())

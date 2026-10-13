@@ -15,18 +15,23 @@ import { PublicInvoice } from './screens/PublicInvoice'
 import { RecurringEditor } from './screens/RecurringEditor'
 import { RecurringList } from './screens/RecurringList'
 import { Settings } from './screens/Settings'
+import { Users } from './screens/Users'
 
 const NAV = [
-  { href: '/', label: 'Invoices', section: 'invoices' },
-  { href: '/recurring', label: 'Recurring', section: 'recurring' },
-  { href: '/clients', label: 'Customers', section: 'clients' },
-  { href: '/settings', label: 'Settings', section: 'settings' },
+  { href: '/', label: 'Invoices', section: 'invoices', adminOnly: false },
+  { href: '/recurring', label: 'Recurring', section: 'recurring', adminOnly: true },
+  { href: '/clients', label: 'Customers', section: 'clients', adminOnly: true },
+  { href: '/users', label: 'Users', section: 'users', adminOnly: true },
+  { href: '/settings', label: 'Settings', section: 'settings', adminOnly: true },
 ]
 
 type Route = ReturnType<typeof useRoute>
 
 function Screen({ path, query }: Route) {
   const [section, id, action] = path
+  const isAdmin = useInvoicing((s) => s.isAdmin)
+  // Members only work with invoices; the database enforces the same rules.
+  if (!isAdmin && section && section !== 'invoices') return <Dashboard />
   if (section === 'invoices' && id === 'new') return <InvoiceEditor key="new" />
   if (section === 'invoices' && id && action === 'edit') return <InvoiceEditor key={id} id={id} />
   if (section === 'invoices' && id) return <InvoiceView id={id} />
@@ -35,6 +40,7 @@ function Screen({ path, query }: Route) {
   if (section === 'recurring') return <RecurringList />
   if (section === 'clients') return <Clients />
   if (section === 'settings') return <Settings />
+  if (section === 'users') return <Users />
   return <Dashboard />
 }
 
@@ -61,6 +67,7 @@ function Authed(route: Route) {
   const userId = session?.user.id
   const loaded = useInvoicing((s) => s.loaded)
   const businessName = useInvoicing((s) => s.settings.businessName)
+  const isAdmin = useInvoicing((s) => s.isAdmin)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -82,6 +89,7 @@ function Authed(route: Route) {
     )
 
   const current = route.path[0] ?? 'invoices'
+  const nav = NAV.filter((n) => isAdmin || !n.adminOnly)
 
   return (
     <div className="min-h-screen font-body">
@@ -91,7 +99,7 @@ function Authed(route: Route) {
             {businessName || 'Invoicing'}
           </a>
           <nav className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-2 sm:pb-0">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <a
                 key={n.href}
                 href={`#${n.href}`}
@@ -103,6 +111,14 @@ function Authed(route: Route) {
                 {n.label}
               </a>
             ))}
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-md text-sm whitespace-nowrap border-0 bg-transparent text-slate-500 hover:text-slate-900 cursor-pointer"
+              title={session.user.email ?? undefined}
+              onClick={() => supabase.auth.signOut()}
+            >
+              Sign out
+            </button>
           </nav>
         </div>
       </header>

@@ -12,6 +12,7 @@ export function InvoiceView({ id }: { id: string }) {
   const client = useInvoicing((s) => s.clients.find((c) => c.id === invoice?.clientId))
   const recurring = useInvoicing((s) => s.recurring.find((r) => r.id === invoice?.recurringId))
   const settings = useInvoicing((s) => s.settings)
+  const isAdmin = useInvoicing((s) => s.isAdmin)
   const setInvoiceStatus = useInvoicing((s) => s.setInvoiceStatus)
   const deleteInvoice = useInvoicing((s) => s.deleteInvoice)
   const saveInvoice = useInvoicing((s) => s.saveInvoice)
@@ -112,7 +113,7 @@ export function InvoiceView({ id }: { id: string }) {
             <Button onClick={() => window.print()}>Download PDF</Button>
             {invoice.status !== 'void' && <Button onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>Edit</Button>}
             <Button onClick={duplicate}>Duplicate</Button>
-            {invoice.status === 'draft' ? (
+            {!isAdmin ? null : invoice.status === 'draft' ? (
               <Button variant="danger" onClick={remove}>
                 Delete
               </Button>
