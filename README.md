@@ -48,7 +48,7 @@ create duplicates (row locks plus a unique index on schedule + issue date).
    `supabase/migrations/20261012000002_schedule.sql`.
    (Or with the Supabase CLI: `supabase link` then `supabase db push`.)
 3. **Auth**: under **Authentication → URL Configuration**, set the Site URL to
-   your GitHub Pages URL (`https://rvs-spec.github.io/8limbsinc-invoicing/`).
+   your GitHub Pages URL (`https://eightlimbsinc.github.io/8limbsInvoicing/`).
 4. **Connect the app**: copy the Project URL and the `anon` public key from
    **Project Settings → API**. In GitHub open the repo's **Settings → Secrets and
    variables → Actions → Variables** and add `SUPABASE_URL` and

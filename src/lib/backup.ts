@@ -101,14 +101,23 @@ export async function importBackup(raw: unknown): Promise<string> {
   if (data.recurring.length) check(await supabase.from('recurring_invoices').upsert(data.recurring.map((r) => toRow(strip(r, 'userId', 'createdAt', 'updatedAt')))))
   if (data.invoices.length) check(await supabase.from('invoices').upsert(data.invoices.map((i) => toRow(strip(i, 'userId', 'createdAt', 'updatedAt', 'shareToken')))))
 
-  // Fill in business details only where nothing is set yet.
-  const current = useInvoicing.getState().settings
-  const fill = Object.fromEntries(
-    (['businessName', 'email', 'phone', 'address', 'website', 'logo', 'paymentLink', 'defaultNotes'] as const)
-      .filter((k) => !current[k] && data.settings[k])
-      .map((k) => [k, data.settings[k]]),
+  // Carry the settings over (imported values win where they're set), and
+  // continue numbering after the highest invoice number either side has used.
+  const { settings: current, invoices: existing } = useInvoicing.getState()
+  const imported = data.settings as Partial<Settings>
+  const patch: Partial<Settings> = Object.fromEntries(
+    Object.entries(imported).filter(([k, v]) => k in current && k !== 'nextNumber' && v !== '' && v != null),
   )
-  if (Object.keys(fill).length) await useInvoicing.getState().saveSettings(fill)
+  const prefix = patch.invoicePrefix ?? current.invoicePrefix
+  const highest = Math.max(
+    0,
+    ...[...existing, ...data.invoices]
+      .filter((i) => i.number.startsWith(prefix))
+      .map((i) => Number(i.number.slice(prefix.length)))
+      .filter(Number.isFinite),
+  )
+  patch.nextNumber = Math.max(current.nextNumber, imported.nextNumber ?? 1, highest + 1)
+  await useInvoicing.getState().saveSettings(patch)
 
   await useInvoicing.getState().load()
   return `Imported ${data.clients.length} customers, ${data.invoices.length} invoices and ${data.recurring.length} recurring invoices.`
