@@ -53,10 +53,12 @@ create duplicates (row locks plus a unique index on schedule + issue date).
    **Project Settings → API**. In GitHub open the repo's **Settings → Secrets and
    variables → Actions → Variables** and add `SUPABASE_URL` and
    `SUPABASE_ANON_KEY`. Re-run the deploy workflow (or push).
-5. **Create your account** on the deployed site ("First time? Create an
-   account"), then turn off sign-ups in Supabase: **Authentication → Providers →
-   Email → Allow new users to sign up** off. (Row-level security already keeps
-   each account's data private; this just stops strangers creating accounts.)
+5. **Create accounts (admin only)**: the app has no public sign-up. Turn off
+   sign-ups in Supabase (**Authentication → Sign In / Providers → Email → Allow
+   new users to sign up** off), then add each user under **Authentication →
+   Users → Add user → Create new user** with an email and password (tick
+   **Auto Confirm User**). They sign in on the site with those details. To reset
+   a password, use the user's **⋯** menu in that list.
 6. In **Settings**, add your logo, address, website, payment link and bank
    details (start from the Net 30 + bank wire template), and set **Next number**
    to continue your existing sequence (e.g. 157).
