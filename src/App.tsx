@@ -25,6 +25,8 @@ const NAV = [
   { href: '/settings', label: 'Settings', section: 'settings', adminOnly: true },
 ]
 
+const LOGO_URL = `${import.meta.env.BASE_URL}logo.png`
+
 type Route = ReturnType<typeof useRoute>
 
 function Screen({ path, query }: Route) {
@@ -95,7 +97,8 @@ function Authed(route: Route) {
     <div className="min-h-screen font-body">
       <header className="no-print bg-white border-b border-slate-200" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="mx-auto max-w-6xl px-4 min-h-14 flex flex-wrap items-center justify-between gap-x-4">
-          <a href="#/" className="font-semibold truncate text-slate-900 no-underline py-3">
+          <a href="#/" className="flex items-center gap-2.5 font-semibold truncate text-slate-900 no-underline py-2">
+            <img src={LOGO_URL} alt="" className="h-10 w-10 object-contain shrink-0" />
             {businessName || 'Invoicing'}
           </a>
           <nav className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-2 sm:pb-0">
