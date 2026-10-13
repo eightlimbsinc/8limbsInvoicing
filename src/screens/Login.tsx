@@ -27,9 +27,10 @@ export function Login() {
   return (
     <div className="min-h-screen grid place-items-center p-4">
       <form onSubmit={submit} className="panel shadow-sm w-full max-w-sm p-6 flex flex-col gap-4">
-        <div>
+        <div className="flex flex-col items-center text-center">
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Eight Limbs" className="h-28 w-28 object-contain mb-2" />
           <h1 className="text-xl font-semibold m-0">Sign in</h1>
-          <p className="m-0 mt-1 text-sm text-slate-500">Invoicing</p>
+          <p className="m-0 mt-1 text-sm text-slate-500">8 Limbs Invoicing</p>
         </div>
         <ErrorBanner error={error} />
         <Field label="Email">
