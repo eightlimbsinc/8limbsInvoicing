@@ -14,6 +14,7 @@ export function Dashboard() {
   const invoices = useInvoicing((s) => s.invoices)
   const clients = useInvoicing((s) => s.clients)
   const currency = useInvoicing((s) => s.settings.currency)
+  const isAdmin = useInvoicing((s) => s.isAdmin)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
 
@@ -67,7 +68,13 @@ export function Dashboard() {
 
       {invoices.length === 0 ? (
         <EmptyState title="No invoices yet">
-          Start with <a href="#/settings">your business details</a>, then create an invoice or set up a <a href="#/recurring">recurring invoice</a>.
+          {isAdmin ? (
+            <>
+              Start with <a href="#/settings">your business details</a>, then create an invoice or set up a <a href="#/recurring">recurring invoice</a>.
+            </>
+          ) : (
+            'Create your first invoice with “+ New invoice”.'
+          )}
         </EmptyState>
       ) : (
         <div className="panel shadow-sm">

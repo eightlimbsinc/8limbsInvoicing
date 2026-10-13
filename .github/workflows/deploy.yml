@@ -13,8 +13,9 @@ permissions:
   pages: write
   id-token: write
 
+# Per-branch, so a PR build never cancels a live deploy from main.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,7 +42,9 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+  # Other branches (PRs) only build and check; just main publishes the live site.
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
