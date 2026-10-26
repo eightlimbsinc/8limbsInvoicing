@@ -14,6 +14,32 @@ const COLUMNS = 'lg:grid-cols-[minmax(0,1.5fr)_120px_minmax(0,1fr)_110px_130px_9
 
 const FILTERS: Filter[] = ['all', 'draft', 'sent', 'overdue', 'paid', 'void']
 
+type SortKey = 'issue' | 'due'
+type SortDir = 'desc' | 'asc'
+interface Sort {
+  key: SortKey
+  dir: SortDir
+}
+const SORT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'issue-desc', label: 'Issue date (newest first)' },
+  { value: 'issue-asc', label: 'Issue date (oldest first)' },
+  { value: 'due-desc', label: 'Due date (latest first)' },
+  { value: 'due-asc', label: 'Due date (soonest first)' },
+]
+const SORT_STORAGE = 'invoices.sort'
+const DEFAULT_SORT: Sort = { key: 'issue', dir: 'desc' }
+
+/** The last sort used on this browser, if any. */
+function loadSort(): Sort {
+  try {
+    const [key, dir] = (localStorage.getItem(SORT_STORAGE) ?? '').split('-')
+    if ((key === 'issue' || key === 'due') && (dir === 'asc' || dir === 'desc')) return { key, dir }
+  } catch {
+    // Storage unavailable (private window etc.): fall back to the default.
+  }
+  return DEFAULT_SORT
+}
+
 export function Dashboard() {
   const invoices = useInvoicing((s) => s.invoices)
   const clients = useInvoicing((s) => s.clients)
@@ -21,13 +47,23 @@ export function Dashboard() {
   const isAdmin = useInvoicing((s) => s.isAdmin)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
+  const [sort, setSortState] = useState<Sort>(loadSort)
+
+  const setSort = (next: Sort) => {
+    setSortState(next)
+    try {
+      localStorage.setItem(SORT_STORAGE, `${next.key}-${next.dir}`)
+    } catch {
+      // Not remembered, but the list still sorts.
+    }
+  }
+  // Clicking a column header sorts by it (newest first), or flips the order if it's already active.
+  const toggleSort = (key: SortKey) => setSort(sort.key === key ? { key, dir: sort.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' })
 
   const rows = useMemo(() => {
     const today = todayISO()
     const clientName = new Map(clients.map((c) => [c.id, c.name]))
-    return invoices
-      .map((inv) => ({ inv, status: displayStatus(inv, today), client: clientName.get(inv.clientId) ?? '—' }))
-      .sort((a, b) => b.inv.issueDate.localeCompare(a.inv.issueDate) || b.inv.number.localeCompare(a.inv.number))
+    return invoices.map((inv) => ({ inv, status: displayStatus(inv, today), client: clientName.get(inv.clientId) ?? '—' }))
   }, [invoices, clients])
 
   const stats = useMemo(() => {
@@ -46,10 +82,14 @@ export function Dashboard() {
   }, [rows, currency])
 
   const q = query.trim().toLowerCase()
-  const visible = rows.filter(
-    // Voided invoices only appear under the Void filter.
-    (r) => (filter === 'all' ? r.status !== 'void' : r.status === filter) && (!q || [invoiceTitle(r.inv), r.inv.number, r.client].some((t) => t.toLowerCase().includes(q))),
-  )
+  const field = sort.key === 'issue' ? 'issueDate' : 'dueDate'
+  const sign = sort.dir === 'desc' ? -1 : 1
+  const visible = rows
+    .filter(
+      // Voided invoices only appear under the Void filter.
+      (r) => (filter === 'all' ? r.status !== 'void' : r.status === filter) && (!q || [invoiceTitle(r.inv), r.inv.number, r.client].some((t) => t.toLowerCase().includes(q))),
+    )
+    .sort((a, b) => sign * (a.inv[field].localeCompare(b.inv[field]) || a.inv.number.localeCompare(b.inv.number)))
 
   return (
     <>
@@ -98,7 +138,24 @@ export function Dashboard() {
                 </button>
               ))}
             </div>
-            <input className="input sm:ml-auto sm:max-w-60" type="search" placeholder="Search name, number or customer" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
+              <select
+                className="input sm:w-auto"
+                aria-label="Sort invoices"
+                value={`${sort.key}-${sort.dir}`}
+                onChange={(e) => {
+                  const [key, dir] = e.target.value.split('-') as [SortKey, SortDir]
+                  setSort({ key, dir })
+                }}
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    Sort: {o.label}
+                  </option>
+                ))}
+              </select>
+              <input className="input sm:w-60" type="search" placeholder="Search name, number or customer" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
           </div>
 
           {visible.length === 0 ? (
@@ -114,8 +171,11 @@ export function Dashboard() {
                 <span className="pl-12">Invoice Name</span>
                 <span>Invoice Number</span>
                 <span>Customer</span>
-                <span>Issue Date</span>
-                <span className="text-right">Amount</span>
+                <SortHeader label="Issue Date" active={sort.key === 'issue'} dir={sort.dir} onClick={() => toggleSort('issue')} />
+                <span className="flex justify-end items-center gap-1">
+                  Amount ·
+                  <SortHeader label="Due" active={sort.key === 'due'} dir={sort.dir} onClick={() => toggleSort('due')} />
+                </span>
                 <span>Status</span>
               </div>
               <ul className="list-none m-0 p-0 divide-y divide-slate-100">
@@ -178,6 +238,25 @@ function Stat({ label, value, sub, danger }: { label: string; value: string; sub
       <div className={clsx('mt-1 text-lg font-semibold tabular-nums', danger && 'text-red-700')}>{value}</div>
       {sub && <div className="text-xs text-slate-500">{sub}</div>}
     </div>
+  )
+}
+
+function SortHeader({ label, active, dir, onClick }: { label: string; active: boolean; dir: SortDir; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Sort by ${label.toLowerCase().replace(/ date$/, '')} date`}
+      className={clsx(
+        'justify-self-start inline-flex items-center gap-1 p-0 border-0 bg-transparent text-xs cursor-pointer hover:text-slate-900',
+        active ? 'text-slate-900 font-semibold' : 'text-slate-600',
+      )}
+    >
+      {label}
+      <span aria-hidden="true" className={clsx(!active && 'opacity-30')}>
+        {active && dir === 'asc' ? '↑' : '↓'}
+      </span>
+    </button>
   )
 }
 
