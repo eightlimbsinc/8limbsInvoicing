@@ -94,7 +94,12 @@ export function InvoiceDocument({ invoice, client, business }: { invoice: Invoic
           <tbody>
             {invoice.items.map((it) => (
               <tr key={it.id} className="border-b border-[#ddd] align-top">
-                <td className="py-3 pr-3 whitespace-pre-line">{it.description}</td>
+                <td className="py-3 pr-3">
+                  <div className="whitespace-pre-line">{it.description}</div>
+                  {it.details?.trim() && (
+                    <div className="mt-1 text-[12.5px] leading-relaxed text-[#777] whitespace-pre-line">{withBold(it.details.trim())}</div>
+                  )}
+                </td>
                 <td className="py-3 text-right tabular-nums">{money(it.unitPrice)}</td>
                 <td className="py-3 text-center tabular-nums">{it.quantity}</td>
                 <td className="hidden sm:table-cell py-3 pl-4">{it.taxRate ? `${it.taxRate}%` : '-'}</td>
@@ -157,18 +162,7 @@ export function RichNotes({ text, vars }: { text: string; vars: Record<string, s
         .filter((line) => line.trim())
         .map((line, i) => (
           <p key={i} className="m-0">
-            {line.split(/(\*\*[^*]+\*\*)/g).map((part, j, parts) => {
-              if (!(part.startsWith('**') && part.endsWith('**') && part.length > 4)) return part
-              const label = part.slice(2, -2)
-              // "**Bank Name:**CIBC" reads as "Bank Name: CIBC"
-              const gap = label.endsWith(':') && /^\S/.test(parts[j + 1] ?? '') ? ' ' : ''
-              return (
-                <strong key={j}>
-                  {label}
-                  {gap}
-                </strong>
-              )
-            })}
+            {withBold(line)}
           </p>
         ))}
     </div>
@@ -176,3 +170,18 @@ export function RichNotes({ text, vars }: { text: string; vars: Record<string, s
 }
 
 export const NOTES_HELP = 'One paragraph per line. **text** for bold. Placeholders: {invoice_number} {due_date} {issue_date} {amount_due} {client_name} {terms} (e.g. Net 30) {terms_days}'
+
+/** Renders **bold** spans. "**Bank Name:**CIBC" reads as "Bank Name: CIBC". */
+function withBold(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, j, parts) => {
+    if (!(part.startsWith('**') && part.endsWith('**') && part.length > 4)) return part
+    const label = part.slice(2, -2)
+    const gap = label.endsWith(':') && /^\S/.test(parts[j + 1] ?? '') ? ' ' : ''
+    return (
+      <strong key={j}>
+        {label}
+        {gap}
+      </strong>
+    )
+  })
+}

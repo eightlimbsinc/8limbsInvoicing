@@ -23,6 +23,7 @@ function items(v: unknown): LineItem[] {
   return (Array.isArray(v) ? v : []).map((it: Partial<LineItem>) => ({
     id: it.id ?? crypto.randomUUID(),
     description: it.description ?? '',
+    details: it.details ?? '',
     quantity: num(it.quantity),
     unitPrice: num(it.unitPrice),
     taxRate: num(it.taxRate),

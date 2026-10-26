@@ -235,7 +235,7 @@ export const useInvoicing = create<State>()((set, get) => ({
     set((s) => ({ recurring: s.recurring.filter((r) => r.id !== id) }))
   },
 
-  blankLine: () => ({ id: uid(), description: '', quantity: 1, unitPrice: 0, taxRate: get().settings.defaultTaxRate }),
+  blankLine: () => ({ id: uid(), description: '', details: '', quantity: 1, unitPrice: 0, taxRate: get().settings.defaultTaxRate }),
 
   blankInvoice: () => {
     const { settings } = get()

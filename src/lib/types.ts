@@ -15,7 +15,10 @@ export interface Client {
 
 export interface LineItem {
   id: string
+  /** The item name, e.g. "Web Support Retainer". */
   description: string
+  /** Optional longer text shown under the item name on the invoice. */
+  details: string
   quantity: number
   unitPrice: number
   /** Percent, e.g. 13 for 13% HST. 0 shows as "-". */

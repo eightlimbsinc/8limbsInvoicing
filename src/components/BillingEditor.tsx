@@ -45,6 +45,7 @@ export function BillingEditor<T extends BillingContent>({ value, onChange }: { v
   const blankLine = useInvoicing((s) => s.blankLine)
   const totals = invoiceTotals(value)
   const money = (n: number) => fmtMoney(n, value.currency)
+  const [openDetails, setOpenDetails] = useState<Set<string>>(() => new Set())
   const patchItem = (id: string, p: Partial<LineItem>) => onChange({ items: value.items.map((it) => (it.id === id ? { ...it, ...p } : it)) })
 
   return (
@@ -60,60 +61,90 @@ export function BillingEditor<T extends BillingContent>({ value, onChange }: { v
         </div>
         <div className="flex flex-col gap-3 sm:gap-2">
           {value.items.map((it) => (
-            <div
-              key={it.id}
-              className="grid grid-cols-[1fr_1fr_1fr_36px] sm:grid-cols-[1fr_80px_120px_80px_110px_36px] gap-2 items-center border-b border-slate-100 pb-3 sm:border-0 sm:pb-0"
-            >
-              <input
-                className="input col-span-4 sm:col-span-1"
-                placeholder="Item name"
-                value={it.description}
-                onChange={(e) => patchItem(it.id, { description: e.target.value })}
-              />
-              <input
-                className="input"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="any"
-                placeholder="Qty"
-                aria-label="Quantity"
-                value={numValue(it.quantity)}
-                onChange={(e) => patchItem(it.id, { quantity: toNum(e.target.value) })}
-              />
-              <input
-                className="input"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                placeholder="Price"
-                aria-label="Price"
-                value={numValue(it.unitPrice)}
-                onChange={(e) => patchItem(it.id, { unitPrice: toNum(e.target.value) })}
-              />
-              <input
-                className="input"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="any"
-                placeholder="Tax %"
-                aria-label="Tax %"
-                value={numValue(it.taxRate)}
-                onChange={(e) => patchItem(it.id, { taxRate: toNum(e.target.value) })}
-              />
-              <span className="hidden sm:block text-right text-sm tabular-nums">{money(lineTotal(it))}</span>
-              <Button
-                variant="ghost"
-                className="!px-0 w-9 row-start-2 col-start-4 sm:row-start-auto sm:col-start-auto"
-                aria-label="Remove line"
-                title="Remove line"
-                disabled={value.items.length === 1}
-                onClick={() => onChange({ items: value.items.filter((x) => x.id !== it.id) })}
-              >
-                ✕
-              </Button>
+            <div key={it.id} className="border-b border-slate-100 pb-3 sm:border-0 sm:pb-0">
+              <div className="grid grid-cols-[1fr_1fr_1fr_36px] sm:grid-cols-[1fr_80px_120px_80px_110px_36px] gap-2 items-center">
+                <input
+                  className="input col-span-4 sm:col-span-1"
+                  placeholder="Item name"
+                  value={it.description}
+                  onChange={(e) => patchItem(it.id, { description: e.target.value })}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  placeholder="Qty"
+                  aria-label="Quantity"
+                  value={numValue(it.quantity)}
+                  onChange={(e) => patchItem(it.id, { quantity: toNum(e.target.value) })}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  placeholder="Price"
+                  aria-label="Price"
+                  value={numValue(it.unitPrice)}
+                  onChange={(e) => patchItem(it.id, { unitPrice: toNum(e.target.value) })}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  placeholder="Tax %"
+                  aria-label="Tax %"
+                  value={numValue(it.taxRate)}
+                  onChange={(e) => patchItem(it.id, { taxRate: toNum(e.target.value) })}
+                />
+                <span className="hidden sm:block text-right text-sm tabular-nums">{money(lineTotal(it))}</span>
+                <Button
+                  variant="ghost"
+                  className="!px-0 w-9 row-start-2 col-start-4 sm:row-start-auto sm:col-start-auto"
+                  aria-label="Remove line"
+                  title="Remove line"
+                  disabled={value.items.length === 1}
+                  onClick={() => onChange({ items: value.items.filter((x) => x.id !== it.id) })}
+                >
+                  ✕
+                </Button>
+              </div>
+              {it.details || openDetails.has(it.id) ? (
+                <div className="mt-2 sm:mr-[calc(110px+36px+1rem)]">
+                  <textarea
+                    className="input text-sm"
+                    rows={3}
+                    placeholder="Description shown under the item on the invoice (optional). **text** for bold."
+                    aria-label={`Description for ${it.description || 'item'}`}
+                    autoFocus={!it.details}
+                    value={it.details}
+                    onChange={(e) => patchItem(it.id, { details: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="mt-0.5 bg-transparent border-0 p-0 text-xs text-red-700 cursor-pointer"
+                    onClick={() => {
+                      setOpenDetails((s) => new Set([...s].filter((x) => x !== it.id)))
+                      patchItem(it.id, { details: '' })
+                    }}
+                  >
+                    Remove description
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="mt-1 bg-transparent border-0 p-0 text-xs text-blue-700 cursor-pointer"
+                  onClick={() => setOpenDetails((s) => new Set(s).add(it.id))}
+                >
+                  + Add description
+                </button>
+              )}
             </div>
           ))}
         </div>
