@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { Button, EmptyState, PageHeader, StatusBadge } from '../components/ui'
+import { Avatar, Button, EmptyState, PageHeader, StatusBadge } from '../components/ui'
 import { displayStatus, round2, todayISO } from '../lib/calc'
 import { fmtDate, fmtMoney } from '../lib/format'
 import { invoiceTitle } from '../lib/db'
@@ -9,6 +9,9 @@ import { useInvoicing } from '../lib/store'
 import type { DisplayStatus } from '../lib/types'
 
 type Filter = 'all' | DisplayStatus
+// Invoice Name | Invoice Number | Customer | Issue Date | Amount | Status
+const COLUMNS = 'lg:grid-cols-[minmax(0,1.5fr)_120px_minmax(0,1fr)_110px_130px_90px]'
+
 const FILTERS: Filter[] = ['all', 'draft', 'sent', 'overdue', 'paid', 'void']
 
 export function Dashboard() {
@@ -102,18 +105,28 @@ export function Dashboard() {
             <p className="p-6 text-center text-sm text-slate-500 m-0">No invoices match.</p>
           ) : (
             <>
-              <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_130px_100px_140px] gap-4 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs text-slate-600">
+              <div
+                className={clsx(
+                  'hidden lg:grid gap-4 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs text-slate-600',
+                  COLUMNS,
+                )}
+              >
                 <span className="pl-12">Invoice Name</span>
                 <span>Invoice Number</span>
-                <span>Status</span>
+                <span>Customer</span>
+                <span>Issue Date</span>
                 <span className="text-right">Amount</span>
+                <span>Status</span>
               </div>
               <ul className="list-none m-0 p-0 divide-y divide-slate-100">
                 {visible.map(({ inv, status, client }) => (
                   <li key={inv.id}>
                     <a
                       href={`#/invoices/${inv.id}`}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_130px_100px_140px] items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-slate-50 no-underline text-inherit"
+                      className={clsx(
+                        'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-slate-50 no-underline text-inherit',
+                        COLUMNS,
+                      )}
                     >
                       <span className="flex items-center gap-3 min-w-0">
                         <span
@@ -123,21 +136,28 @@ export function Dashboard() {
                           {inv.recurringId ? <RecurringIcon /> : <DocumentIcon />}
                         </span>
                         <span className="min-w-0">
-                          <span className="block font-semibold truncate">{invoiceTitle(inv)}</span>
-                          <span className="block text-sm text-slate-500 truncate">{client}</span>
+                          <span className="block font-semibold truncate" title={invoiceTitle(inv)}>
+                            {invoiceTitle(inv)}
+                          </span>
+                          {/* On smaller screens the customer sits under the name. */}
+                          <span className="lg:hidden block text-sm text-slate-500 truncate">{client}</span>
                         </span>
                       </span>
-                      <span className="hidden sm:block text-sm text-slate-600">{inv.number}</span>
-                      <span className="hidden sm:block">
-                        <StatusBadge status={status} />
+                      <span className="hidden lg:block text-sm text-slate-600">{inv.number}</span>
+                      <span className="hidden lg:flex items-center gap-2.5 min-w-0 text-sm text-slate-600">
+                        <Avatar name={client} />
+                        <span className="truncate">{client}</span>
                       </span>
+                      <span className="hidden lg:block text-sm text-slate-600">{fmtDate(inv.issueDate)}</span>
                       <span className="text-right">
-                        <span className="block font-medium tabular-nums">{fmtMoney(inv.total, inv.currency)}</span>
+                        <span className="block font-semibold tabular-nums">{fmtMoney(inv.total, inv.currency)}</span>
                         <span className="block text-xs text-slate-500">Due {fmtDate(inv.dueDate)}</span>
                       </span>
-                      {/* Number and status sit under the name on small screens. */}
-                      <span className="sm:hidden col-span-2 flex items-center gap-2 pl-12 text-xs text-slate-500">
-                        {inv.number} <StatusBadge status={status} />
+                      <span className="hidden lg:block">
+                        <StatusBadge status={status} />
+                      </span>
+                      <span className="lg:hidden col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 pl-12 text-xs text-slate-500">
+                        {inv.number} · Issued {fmtDate(inv.issueDate)} <StatusBadge status={status} />
                       </span>
                     </a>
                   </li>
