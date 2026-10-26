@@ -3,12 +3,14 @@ import { BillingEditor, ClientPicker } from '../components/BillingEditor'
 import { errorMessage } from '../lib/format'
 import { Button, EmptyState, ErrorBanner, Field, PageHeader } from '../components/ui'
 import { TERMS_PRESETS, addDays, daysBetween, termsLabel } from '../lib/calc'
+import { invoiceTitle } from '../lib/db'
 import { navigate } from '../lib/router'
 import { type InvoiceDraft, useInvoicing } from '../lib/store'
 
 export function InvoiceEditor({ id }: { id?: string }) {
   const existing = useInvoicing((s) => (id ? s.invoices.find((i) => i.id === id) : undefined))
   const saveInvoice = useInvoicing((s) => s.saveInvoice)
+  const hasInvoiceNames = useInvoicing((s) => s.hasInvoiceNames)
   const [draft, setDraft] = useState<InvoiceDraft | undefined>(() => existing ?? (id ? undefined : useInvoicing.getState().blankInvoice()))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -41,7 +43,7 @@ export function InvoiceEditor({ id }: { id?: string }) {
   return (
     <>
       <PageHeader
-        title={draft.id ? `Edit ${existing?.number}` : 'New invoice'}
+        title={draft.id ? `Edit ${existing ? invoiceTitle(existing) : ''} · ${existing?.number}` : 'New invoice'}
         subtitle={draft.id ? undefined : 'The invoice number is assigned automatically when you save.'}
         actions={
           <>
@@ -55,6 +57,16 @@ export function InvoiceEditor({ id }: { id?: string }) {
       <ErrorBanner error={error} />
 
       <div className="panel p-4 sm:p-5 flex flex-col gap-5">
+        {hasInvoiceNames && (
+          <Field label="Invoice name">
+            <input
+              className="input"
+              placeholder="e.g. Podcast Services"
+              value={draft.name ?? ''}
+              onChange={(e) => patch({ name: e.target.value })}
+            />
+          </Field>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <ClientPicker value={draft.clientId} onChange={(clientId) => patch({ clientId })} />
           {draft.id ? (

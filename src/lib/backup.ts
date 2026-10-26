@@ -99,7 +99,7 @@ export async function importBackup(raw: unknown): Promise<string> {
   const strip = <T extends object>(o: T, ...keys: string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)))
   if (data.clients.length) check(await supabase.from('clients').upsert(data.clients.map((c) => toRow(strip(c, 'userId', 'createdAt')))))
   if (data.recurring.length) check(await supabase.from('recurring_invoices').upsert(data.recurring.map((r) => toRow(strip(r, 'userId', 'createdAt', 'updatedAt')))))
-  if (data.invoices.length) check(await supabase.from('invoices').upsert(data.invoices.map((i) => toRow(strip(i, 'userId', 'createdAt', 'updatedAt', 'shareToken')))))
+  if (data.invoices.length) check(await supabase.from('invoices').upsert(data.invoices.map((i) => toRow(strip(i, 'userId', 'createdAt', 'updatedAt', 'shareToken', ...(useInvoicing.getState().hasInvoiceNames ? [] : ['name']))))))
 
   // Carry the settings over (imported values win where they're set), and
   // continue numbering after the highest invoice number either side has used.

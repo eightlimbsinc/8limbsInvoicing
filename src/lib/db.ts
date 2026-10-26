@@ -41,7 +41,7 @@ export function clientFromRow(row: Row): Client {
 
 export function invoiceFromRow(row: Row): Invoice {
   const r = fromRow(row) as unknown as Invoice
-  return { ...r, items: items(r.items), discountRate: num(r.discountRate), total: num(r.total) }
+  return { ...r, name: r.name ?? '', items: items(r.items), discountRate: num(r.discountRate), total: num(r.total) }
 }
 
 export function recurringFromRow(row: Row): Recurring {
@@ -59,4 +59,9 @@ export function businessFromRow(row: Row | null): BusinessInfo {
     website: b.website ?? '',
     logo: b.logo ?? '',
   }
+}
+
+/** The invoice's name, falling back to its first line item for invoices that don't have one. */
+export function invoiceTitle(inv: Pick<Invoice, 'name' | 'items' | 'number'>): string {
+  return inv.name.trim() || inv.items.find((it) => it.description.trim())?.description.trim() || inv.number
 }

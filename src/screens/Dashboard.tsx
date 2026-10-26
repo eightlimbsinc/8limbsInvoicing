@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { Avatar, Button, EmptyState, PageHeader, StatusBadge } from '../components/ui'
+import { Button, EmptyState, PageHeader, StatusBadge } from '../components/ui'
 import { displayStatus, round2, todayISO } from '../lib/calc'
 import { fmtDate, fmtMoney } from '../lib/format'
+import { invoiceTitle } from '../lib/db'
 import { navigate } from '../lib/router'
 import { useInvoicing } from '../lib/store'
 import type { DisplayStatus } from '../lib/types'
@@ -44,7 +45,7 @@ export function Dashboard() {
   const q = query.trim().toLowerCase()
   const visible = rows.filter(
     // Voided invoices only appear under the Void filter.
-    (r) => (filter === 'all' ? r.status !== 'void' : r.status === filter) && (!q || r.inv.number.toLowerCase().includes(q) || r.client.toLowerCase().includes(q)),
+    (r) => (filter === 'all' ? r.status !== 'void' : r.status === filter) && (!q || [invoiceTitle(r.inv), r.inv.number, r.client].some((t) => t.toLowerCase().includes(q))),
   )
 
   return (
@@ -94,37 +95,55 @@ export function Dashboard() {
                 </button>
               ))}
             </div>
-            <input className="input sm:ml-auto sm:max-w-60" type="search" placeholder="Search number or customer" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input className="input sm:ml-auto sm:max-w-60" type="search" placeholder="Search name, number or customer" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
 
           {visible.length === 0 ? (
             <p className="p-6 text-center text-sm text-slate-500 m-0">No invoices match.</p>
           ) : (
-            <ul className="list-none m-0 p-0 divide-y divide-slate-100">
-              {visible.map(({ inv, status, client }) => (
-                <li key={inv.id}>
-                  <a href={`#/invoices/${inv.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 no-underline text-inherit">
-                    <Avatar name={client} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{inv.number}</span>
+            <>
+              <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_130px_100px_140px] gap-4 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs text-slate-600">
+                <span className="pl-12">Invoice Name</span>
+                <span>Invoice Number</span>
+                <span>Status</span>
+                <span className="text-right">Amount</span>
+              </div>
+              <ul className="list-none m-0 p-0 divide-y divide-slate-100">
+                {visible.map(({ inv, status, client }) => (
+                  <li key={inv.id}>
+                    <a
+                      href={`#/invoices/${inv.id}`}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_130px_100px_140px] items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-slate-50 no-underline text-inherit"
+                    >
+                      <span className="flex items-center gap-3 min-w-0">
+                        <span
+                          className="grid place-items-center w-9 h-9 shrink-0 rounded-full bg-slate-100 text-slate-500"
+                          title={inv.recurringId ? 'Recurring invoice' : 'One-off invoice'}
+                        >
+                          {inv.recurringId ? <RecurringIcon /> : <DocumentIcon />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block font-semibold truncate">{invoiceTitle(inv)}</span>
+                          <span className="block text-sm text-slate-500 truncate">{client}</span>
+                        </span>
+                      </span>
+                      <span className="hidden sm:block text-sm text-slate-600">{inv.number}</span>
+                      <span className="hidden sm:block">
                         <StatusBadge status={status} />
-                        {inv.recurringId && (
-                          <span className="text-xs text-slate-400" title="Issued by a recurring invoice">
-                            ↻
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-slate-500 truncate">{client}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium tabular-nums">{fmtMoney(inv.total, inv.currency)}</div>
-                      <div className="text-xs text-slate-500">Due {fmtDate(inv.dueDate)}</div>
-                    </div>
-                  </a>
-                </li>
-              ))}
-            </ul>
+                      </span>
+                      <span className="text-right">
+                        <span className="block font-medium tabular-nums">{fmtMoney(inv.total, inv.currency)}</span>
+                        <span className="block text-xs text-slate-500">Due {fmtDate(inv.dueDate)}</span>
+                      </span>
+                      {/* Number and status sit under the name on small screens. */}
+                      <span className="sm:hidden col-span-2 flex items-center gap-2 pl-12 text-xs text-slate-500">
+                        {inv.number} <StatusBadge status={status} />
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}
@@ -139,5 +158,25 @@ function Stat({ label, value, sub, danger }: { label: string; value: string; sub
       <div className={clsx('mt-1 text-lg font-semibold tabular-nums', danger && 'text-red-700')}>{value}</div>
       {sub && <div className="text-xs text-slate-500">{sub}</div>}
     </div>
+  )
+}
+
+function RecurringIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17 2l4 4-4 4" />
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="M7 22l-4-4 4-4" />
+      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+    </svg>
+  )
+}
+
+function DocumentIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 3h9l3 3v15H6z" />
+      <path d="M9 10h6M9 14h6" />
+    </svg>
   )
 }
