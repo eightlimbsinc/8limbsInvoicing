@@ -6,6 +6,7 @@ button and PDF download. Data lives in a Supabase (Postgres) database.
 
 ## Features
 
+- **Invoice names** — each invoice has a name (e.g. "Podcast Services") shown first in the list; recurring invoices are named after their schedule. Needs `supabase/migrations/20261026000004_invoice_names.sql`.
 - **Invoices** — line items with per-line tax, discount, issue/due dates,
   payment terms (Due on receipt, Net 7/15/30/45/60/90 or custom), payment link
   and rich terms & notes. Numbers are assigned by the database

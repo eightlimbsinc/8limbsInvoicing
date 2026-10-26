@@ -25,13 +25,15 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 /** An invoice being edited: new ones have no id/number until the database assigns them. */
-export type InvoiceDraft = BillingContent & Pick<Invoice, 'issueDate' | 'dueDate' | 'status'> & Partial<Pick<Invoice, 'id' | 'number'>>
+export type InvoiceDraft = BillingContent & Pick<Invoice, 'name' | 'issueDate' | 'dueDate' | 'status'> & Partial<Pick<Invoice, 'id' | 'number'>>
 export type RecurringDraft = Omit<Recurring, 'id' | 'generatedCount' | 'lastIssuedOn' | 'total'> & Partial<Pick<Recurring, 'id'>>
 
 interface State {
   loaded: boolean
   /** Admins manage settings, recurring schedules, customers and users; members create invoices. */
   isAdmin: boolean
+  /** False until the invoice-names migration has been run on this database. */
+  hasInvoiceNames: boolean
   settings: Settings
   clients: Client[]
   invoices: Invoice[]
@@ -82,6 +84,7 @@ const content = (d: BillingContent) => ({
 export const useInvoicing = create<State>()((set, get) => ({
   loaded: false,
   isAdmin: false,
+  hasInvoiceNames: true,
   settings: DEFAULT_SETTINGS,
   clients: [],
   invoices: [],
@@ -90,12 +93,13 @@ export const useInvoicing = create<State>()((set, get) => ({
   load: async () => {
     // Catch up on any recurring invoices that came due (the hourly job does this too).
     await supabase.rpc('generate_due_recurring_invoices')
-    const [a, s, c, i, r] = await Promise.all([
+    const [a, s, c, i, r, n] = await Promise.all([
       supabase.rpc('is_admin'),
       supabase.from('settings').select('*').maybeSingle(),
       supabase.from('clients').select('*').order('name'),
       supabase.from('invoices').select('*').order('issue_date', { ascending: false }),
       supabase.from('recurring_invoices').select('*').order('created_at'),
+      supabase.from('invoices').select('name').limit(1),
     ])
     // Databases set up before team roles existed have no is_admin(): everyone there is an admin.
     const isAdmin = a.error ? true : Boolean(a.data)
@@ -104,6 +108,7 @@ export const useInvoicing = create<State>()((set, get) => ({
     set({
       loaded: true,
       isAdmin,
+      hasInvoiceNames: !n.error,
       settings: settingsRow ? settingsFromRow(settingsRow) : DEFAULT_SETTINGS,
       clients: (check(c) ?? []).map(clientFromRow),
       invoices: (check(i) ?? []).map(invoiceFromRow),
@@ -153,7 +158,13 @@ export const useInvoicing = create<State>()((set, get) => ({
   },
 
   saveInvoice: async (draft) => {
-    const row = toRow({ ...content(draft), issueDate: draft.issueDate, dueDate: draft.dueDate, status: draft.status })
+    const row = toRow({
+      ...content(draft),
+      ...(get().hasInvoiceNames ? { name: draft.name.trim() } : {}),
+      issueDate: draft.issueDate,
+      dueDate: draft.dueDate,
+      status: draft.status,
+    })
     const res = draft.id
       ? await supabase.from('invoices').update({ ...row, number: draft.number }).eq('id', draft.id).select().single()
       : await supabase.from('invoices').insert(row).select().single()
@@ -230,6 +241,7 @@ export const useInvoicing = create<State>()((set, get) => ({
     const { settings } = get()
     const issueDate = todayISO()
     return {
+      name: '',
       clientId: '',
       issueDate,
       dueDate: addDays(issueDate, settings.paymentTermsDays),

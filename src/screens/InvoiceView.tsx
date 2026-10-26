@@ -3,6 +3,7 @@ import { InvoiceDocument } from '../components/InvoiceDocument'
 import { Button, EmptyState, ErrorBanner, PageHeader, StatusBadge } from '../components/ui'
 import { displayStatus, invoiceTotals, todayISO } from '../lib/calc'
 import { errorMessage, fmtDate, fmtMoney, shareUrl } from '../lib/format'
+import { invoiceTitle } from '../lib/db'
 import { navigate } from '../lib/router'
 import { useInvoicing } from '../lib/store'
 import type { InvoiceStatus } from '../lib/types'
@@ -74,8 +75,10 @@ export function InvoiceView({ id }: { id: string }) {
     <>
       <PageHeader
         title={
-          <span className="flex items-center gap-2">
-            {invoice.number} <StatusBadge status={status} />
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {invoiceTitle(invoice)}
+            <span className="text-base font-normal text-slate-500">{invoice.number}</span>
+            <StatusBadge status={status} />
           </span>
         }
         subtitle={recurring ? `Issued by recurring invoice “${recurring.name}”` : undefined}

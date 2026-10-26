@@ -35,6 +35,8 @@ export interface BillingContent {
 export interface Invoice extends BillingContent {
   id: string
   number: string
+  /** What the invoice is for, e.g. "Podcast Services". Shown first in lists. */
+  name: string
   recurringId: string | null
   /** ISO dates, YYYY-MM-DD */
   issueDate: string
